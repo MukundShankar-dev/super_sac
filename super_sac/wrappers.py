@@ -1,6 +1,13 @@
+from dm_env import specs
+import argparse
+import super_sac
+from torch import nn
+import torch.nn.functional as F
+from dm_control import suite
+import gin
+import os
 import random
 from collections import deque
-
 import gymnasium as gym
 import numpy as np
 
@@ -260,3 +267,100 @@ class FrameStack(gym.Wrapper):
     def _get_obs(self):
         assert len(self._frames) == self._k
         return np.concatenate(list(self._frames), axis=0)
+
+
+class DMControlWrapper:
+    def __init__(self, env):
+        self._env = env
+        self._action_spec = self._env.action_spec()
+        self._observation_spec = self._env.observation_spec()
+
+    def reset(self):
+        time_step = self._env.reset()
+        return self._extract_observation(time_step), {}
+
+    def step(self, action):
+        time_step = self._env.step(action)
+        obs = self._extract_observation(time_step)
+        reward = time_step.reward if time_step.reward is not None else 0.0
+        done = time_step.last()
+        truncated = False  # DM Control environments do not have a truncated flag by default
+        return obs, reward, done, truncated, {}
+
+    def _extract_observation(self, time_step):
+        obs = time_step.observation
+        if isinstance(obs, dict):
+            obs = np.concatenate([v for v in obs.values()], axis=-1)
+        return {"obs": obs}
+
+    def sample(self):
+        return np.random.uniform(
+            self._action_spec.minimum, self._action_spec.maximum, self._action_spec.shape
+        )
+
+    @property
+    def action_spec(self):
+        return self._action_spec
+
+    @property
+    def observation_spec(self):
+        return self._observation_spec
+
+    @property
+    def action_space(self):
+        return self
+
+    @property
+    def observation_space(self):
+        return self
+
+    @property
+    def shape(self):
+        return self._action_spec.shape
+
+    def get_observation_dim(self):
+        if isinstance(self._observation_spec, dict):
+            return sum([np.prod(v.shape) for v in self._observation_spec.values()])
+        else:
+            return self._observation_spec.shape[-1]
+
+
+class ParallelActorsDM:
+    def __init__(self, make_env_fn, num_envs):
+        self.envs = [make_env_fn() for _ in range(num_envs)]
+        self.num_envs = num_envs
+
+    def reset(self):
+        state, info = self.envs[0].reset()
+        return state, info
+
+    def step(self, action):
+        result = self.envs[0].step(action)
+        obs, reward, done, trunc, info = result
+        return obs, reward, done, trunc, info
+
+    def sample(self):
+        return self.envs[0].sample_action()
+
+    @property
+    def action_spec(self):
+        return self.envs[0].action_spec
+
+    @property
+    def observation_spec(self):
+        return self.envs[0].observation_spec
+
+    @property
+    def action_space(self):
+        return self.envs[0]
+
+    @property
+    def observation_space(self):
+        return self.envs[0]
+
+    @property
+    def shape(self):
+        return self.envs[0].action_spec.shape
+
+    def get_observation_dim(self):
+        return self.envs[0].get_observation_dim()

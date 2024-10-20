@@ -1,9 +1,18 @@
-gym
-numpy
-torch
-torchvision
-tqdm
-opencv-python
-Pillow
-scikit-image
-gin-config
+# gym
+# numpy
+# torch
+# torchvision
+# tqdm
+# opencv-python
+# Pillow
+# scikit-image
+# gin-config
+gym==0.24.1
+numpy==1.21.5
+torch==1.10.0
+torchvision==0.11.2
+tqdm==4.62.3
+opencv-python==4.5.4.60
+Pillow==8.4.0
+scikit-image==0.18.3
+gin-config==0.5.0
